@@ -241,25 +241,78 @@ def transcribe_audio(audio_file, folder_path):
     return transcript_text
 
 
+# 语言检测函数
+def detect_language(text):
+    """
+    简单的语言检测函数
+    基于字符特征检测中英文
+    """
+    if not text or len(text.strip()) < 10:
+        return "zh"  # 默认中文
+    
+    # 统计中文字符数量
+    chinese_chars = 0
+    total_chars = 0
+    
+    for char in text[:1000]:  # 只检查前1000个字符
+        if '\u4e00' <= char <= '\u9fff':  # 中文Unicode范围
+            chinese_chars += 1
+        if char.isalpha() or '\u4e00' <= char <= '\u9fff':
+            total_chars += 1
+    
+    if total_chars == 0:
+        return "zh"  # 默认中文
+        
+    chinese_ratio = chinese_chars / total_chars
+    
+    # 如果中文字符比例超过30%，认为是中文
+    if chinese_ratio > 0.3:
+        return "zh"
+    else:
+        return "en"
+
+
 # Step 3: Gemini 总结
 def summarize_text(text, folder_path):
     summary_file = os.path.join(folder_path, "summary.txt")
     print("▶️ 正在总结内容...")
     
+    # 检测转录文本的语言
+    detected_lang = detect_language(text)
+    print(f"🌐 检测到语言: {'中文' if detected_lang == 'zh' else '英文'}")
+    
     # 使用 Gemini 1.5 Flash 模型
     model = genai.GenerativeModel('gemini-1.5-flash')
-    prompt = f"""You are a professional research assistant. Based on the transcript text, extract 4-6 key conclusions/points, focusing on actionable or judgmental viewpoints.
+    
+    # 根据检测到的语言选择对应的prompt
+    if detected_lang == "zh":
+        prompt = f"""你是专业的内容总结员。基于转录文本，提炼4-6条关键结论/要点，偏向可执行或判断性的观点。
+
+要求：
+1.使用与转录文本相同的语言进行总结。
+2.重点突出 可执行的观点或带有判断性的结论。
+3.不要包含无关细节或冗长的讨论。
+4.如果转录内容仅提供 中立信息，请给出 总结性的判断。
+5.确保总结 清晰、简洁、易于理解。
+
+转录内容：
+{text}
+
+请用中文总结："""
+    else:
+        prompt = f"""You are a professional content summarizer. Based on the transcript text, extract 4-6 key conclusions/points, focusing on actionable or judgmental viewpoints.
 
 Requirements:
-1. Use the SAME LANGUAGE as the input transcript text
-2. Don't repeat irrelevant details or lengthy discussions
-3. If the video only provides neutral information, give summary judgments
-4. Use clear and understandable language
+1. Use the SAME LANGUAGE as the transcript text.
+2. Focus on actionable insights or judgmental viewpoints.
+3. Do not include irrelevant details or lengthy discussions.
+4. If the transcript only provides neutral information, provide summary judgments instead.
+5. Ensure the summary is clear, concise, and easy to understand.
 
 Transcript content:
 {text}
 
-Please summarize using the same language as the transcript:"""
+Please summarize in English:"""
     
     response = model.generate_content(prompt)
     summary = response.text
