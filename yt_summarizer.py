@@ -5,9 +5,6 @@ import subprocess
 import openai
 import google.generativeai as genai
 import sys
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -20,12 +17,6 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY') 
 ASSEMBLYAI_API_KEY = os.getenv('ASSEMBLYAI_API_KEY')
 
-# 邮件配置
-EMAIL_SMTP_SERVER = os.getenv('EMAIL_SMTP_SERVER', 'smtp.gmail.com')
-EMAIL_SMTP_PORT = int(os.getenv('EMAIL_SMTP_PORT', '587'))
-EMAIL_ADDRESS = os.getenv('EMAIL_ADDRESS')
-EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-RECIPIENT_EMAIL = 'yzhou7771@gmail.com'
 
 # 验证必要的 API Keys 是否存在
 if not OPENAI_API_KEY:
@@ -328,60 +319,6 @@ Please summarize in English:"""
     return summary
 
 
-# Step 4: 邮件发送
-def send_email_summary(video_url, folder_path, summary_text):
-    """
-    发送总结邮件到指定邮箱
-    
-    Args:
-        video_url (str): YouTube视频链接
-        folder_path (str): 文件夹路径
-        summary_text (str): 总结内容
-    """
-    # 检查邮件配置
-    if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
-        print("⚠️ 未配置邮件账户信息，跳过邮件发送")
-        return
-    
-    try:
-        print("📧 正在发送邮件...")
-        
-        # 创建邮件内容
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_ADDRESS
-        msg['To'] = RECIPIENT_EMAIL
-        msg['Subject'] = f'YouTube视频总结 - {folder_path}'
-        
-        # 邮件正文
-        body = f"""
-YouTube视频总结报告
-
-📹 视频链接: {video_url}
-📁 保存位置: {folder_path}
-📅 处理时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-📋 内容总结:
-{summary_text}
-
----
-此邮件由YouTube视频总结器自动发送
-        """
-        
-        msg.attach(MIMEText(body, 'plain', 'utf-8'))
-        
-        # 连接SMTP服务器并发送邮件
-        server = smtplib.SMTP(EMAIL_SMTP_SERVER, EMAIL_SMTP_PORT)
-        server.starttls()  # 启用TLS加密
-        server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-        text = msg.as_string()
-        server.sendmail(EMAIL_ADDRESS, RECIPIENT_EMAIL, text)
-        server.quit()
-        
-        print(f"✅ 邮件发送成功: {RECIPIENT_EMAIL}")
-        
-    except Exception as e:
-        print(f"❌ 邮件发送失败: {e}")
-        print("💾 总结内容已保存到本地文件")
 
 
 def print_usage():
@@ -399,11 +336,6 @@ def print_usage():
     print("  ✅ AssemblyAI 转录")
     print("  ✅ Gemini 1.5 Flash 总结")
     print("  ✅ 自动文件夹管理")
-    print("  ✅ 邮件发送总结 (可选)")
-    print("")
-    print("邮件配置:")
-    print("  在 .env 文件中设置 EMAIL_ADDRESS 和 EMAIL_PASSWORD")
-    print("  用于 Gmail 需要使用应用密码，而非普通密码")
 
 
 if __name__ == "__main__":
@@ -441,17 +373,17 @@ if __name__ == "__main__":
         try:
             summary = summarize_text(text, folder_path)
             
-            # 发送邮件
-            try:
-                send_email_summary(video_url, folder_path, summary)
-            except Exception as e:
-                print(f"⚠️ 邮件发送异常: {e}")
-                print("📂 总结已成功保存到本地")
             
             # 只有总结成功生成后才删除音频文件以节省空间
             if os.path.exists(audio_file):
                 os.remove(audio_file)
                 print(f"🗑️ 已删除音频文件: {audio_file}")
+            
+            # 删除转录文件，只保留总结
+            transcript_file = os.path.join(folder_path, "transcript.txt")
+            if os.path.exists(transcript_file):
+                os.remove(transcript_file)
+                print(f"🗑️ 已删除转录文件: {transcript_file}")
                 
         except Exception as e:
             print(f"❌ 总结生成失败: {e}")
