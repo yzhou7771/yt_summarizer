@@ -25,6 +25,7 @@ load_dotenv()
 CHANNELS_FILE = os.path.join(SCRIPT_DIR, "channels.json")
 YT_SUMMARIZER = os.path.join(SCRIPT_DIR, "yt_summarizer.py")
 LOG_FILE = os.path.join(SCRIPT_DIR, "auto.log")
+PROCESSED_FILE = os.path.join(SCRIPT_DIR, "processed.json")
 
 # 邮件配置
 EMAIL_SMTP_SERVER = os.getenv('EMAIL_SMTP_SERVER', 'smtp.gmail.com')
@@ -61,6 +62,60 @@ def load_channels():
     except Exception as e:
         log(f"❌ 加载频道配置失败: {e}")
         return []
+
+def load_processed_videos():
+    """加载已处理的视频记录"""
+    try:
+        if not os.path.exists(PROCESSED_FILE):
+            # 如果文件不存在，创建初始结构
+            processed_data = {"processed_videos": {}}
+            with open(PROCESSED_FILE, "w", encoding="utf-8") as f:
+                json.dump(processed_data, f, indent=2, ensure_ascii=False)
+            log("📋 创建了新的处理记录文件")
+            return processed_data["processed_videos"]
+        
+        with open(PROCESSED_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            processed = data.get("processed_videos", {})
+            log(f"📋 加载了 {len(processed)} 个已处理视频记录")
+            return processed
+            
+    except Exception as e:
+        log(f"❌ 加载处理记录失败: {e}")
+        return {}
+
+def save_processed_video(video_id, video_info):
+    """保存已处理的视频记录"""
+    try:
+        processed = load_processed_videos()
+        processed[video_id] = {
+            "title": video_info["title"],
+            "url": video_info["url"],
+            "channel": video_info["channel_title"],
+            "published": str(video_info["published"]),
+            "processed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        # 保存到文件
+        data = {"processed_videos": processed}
+        with open(PROCESSED_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        
+        log(f"📋 记录已处理视频: {video_info['title']}")
+        return True
+        
+    except Exception as e:
+        log(f"❌ 保存处理记录失败: {e}")
+        return False
+
+def is_video_processed(video_id):
+    """检查视频是否已经处理过"""
+    try:
+        processed = load_processed_videos()
+        return video_id in processed
+    except Exception as e:
+        log(f"❌ 检查处理记录失败: {e}")
+        return False
 
 def get_channel_videos(channel_id, target_date):
     """获取指定频道在目标日期发布的视频"""
@@ -197,6 +252,9 @@ def process_video(video_info):
             except Exception as e:
                 log(f"⚠️ 邮件处理异常: {video_info['title']}, 错误: {e}")
             
+            # 记录已处理的视频
+            save_processed_video(video_info['id'], video_info)
+            
             return True
         else:
             log(f"❌ 视频处理失败: {video_info['title']}")
@@ -242,18 +300,33 @@ def main():
         today_videos = get_channel_videos(channel_id, today)
         all_new_videos.extend(today_videos)
     
+    # 过滤掉已处理的视频
+    unprocessed_videos = []
+    skipped_count = 0
+    
+    for video in all_new_videos:
+        video_id = video['id']
+        if is_video_processed(video_id):
+            log(f"⏭️ 跳过已处理视频: {video['title']}")
+            skipped_count += 1
+        else:
+            unprocessed_videos.append(video)
+    
     # 处理结果统计
-    if not all_new_videos:
-        log("✅ 昨天和今天都没有新视频，任务完成")
+    if not unprocessed_videos:
+        if all_new_videos:
+            log(f"✅ 发现 {len(all_new_videos)} 个视频，但全部已处理过，任务完成")
+        else:
+            log("✅ 昨天和今天都没有新视频，任务完成")
         return
     
-    log(f"📊 共发现 {len(all_new_videos)} 个新视频")
+    log(f"📊 共发现 {len(all_new_videos)} 个视频，其中 {len(unprocessed_videos)} 个未处理，{skipped_count} 个已跳过")
     
     # 处理每个视频
     success_count = 0
     failed_count = 0
     
-    for video in all_new_videos:
+    for video in unprocessed_videos:
         if process_video(video):
             success_count += 1
         else:
