@@ -2,7 +2,8 @@ name: YouTube Summarizer
 
 on:
   schedule:
-    - cron: "0 14 * * *"  # 每天 UTC 14 点执行 (EST 9am/EDT 10am)
+    - cron: "0 14 * * *"  # 9am EST = 14:00 UTC (冬令时)
+    - cron: "0 13 * * *"  # 9am EDT = 13:00 UTC (夏令时)
   workflow_dispatch:
 
 jobs:
@@ -23,6 +24,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           pip install yt-dlp
+          
+      - name: Configure yt-dlp for CI environment
+        run: |
+          mkdir -p ~/.config/yt-dlp
+          echo "--no-check-certificate" > ~/.config/yt-dlp/config
+          echo "--prefer-free-formats" >> ~/.config/yt-dlp/config
+          echo "--extractor-retries 5" >> ~/.config/yt-dlp/config
+          echo "--fragment-retries 5" >> ~/.config/yt-dlp/config
+          echo "--retry-sleep 5" >> ~/.config/yt-dlp/config
 
       - name: Install Python dependencies
         run: |

@@ -105,14 +105,26 @@ def download_audio(video_url, folder_path, max_retries=3):
             print(f"⏳ 等待 {delay}s 再开始下载...")
             time.sleep(delay)
 
+            # 基础命令
             cmd = [
                 "yt-dlp",
-                "--cookies", "cookies.txt",
                 "-x",
                 "--audio-format", "mp3",
                 "-o", output_file,
+                "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "--extractor-retries", "3",
+                "--fragment-retries", "3",
+                "--retry-sleep", "3",
                 video_url
             ]
+
+            # 如果存在cookies文件则使用，否则跳过
+            if os.path.exists("cookies.txt"):
+                cmd.insert(1, "--cookies")
+                cmd.insert(2, "cookies.txt")
+                print("▶️ 使用cookies文件下载音频...")
+            else:
+                print("▶️ 不使用cookies下载音频...")
 
             print("▶️ 正在运行 yt-dlp 下载音频...")
             subprocess.run(cmd, check=True)
